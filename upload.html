@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Upload</title>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        body {
+            background: #333333;
+            color: white;
+            font-family: 'Roboto', sans-serif;
+        }
+        input[type="text"] {
+            font-size: 1.3em;
+            width: 20em;
+            height: 1.5em;
+        }
+        .label {
+            font-size: 1.3em;
+            margin-top: 0.9rem;
+            margin-bottom: 0.2rem;
+        }
+        button {
+            margin-top: 2rem;
+            font-size: 2em;
+        }
+        h1 {
+            font-size: 2em;
+        }
+    </style>
+    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+</head>
+<body>
+    <p class="label">Song name</p>
+    <input id="name" type="text">
+    <p class="label">Song author</p>
+    <input id="author" type="text">
+    <p class="label">Direct download link</p>
+    <input id="url" type="text">
+    <br>
+    <button id="upload">Upload</button>
+
+    <script>
+        const btn = document.getElementById('upload');
+        btn.addEventListener('click', async e => {
+            e.preventDefault();
+            if (btn.hasAttribute('disabled')) return;
+            btn.setAttribute('disabled', true);
+            const name = document.getElementById('name').value;
+            const author = document.getElementById('author').value;
+            const url = document.getElementById('url').value;
+            if (!name || !author || !url) {
+                btn.removeAttribute('disabled');
+                return;
+            }
+            const response = await axios.post('/upload', {
+                name, author, url
+            });
+            if (response.status === 200) {
+                document.body.insertAdjacentHTML('beforeend', `<h1>Song uploaded! ID: ${response.data.song_id}</h1>`);
+            } else {
+                document.body.insertAdjacentHTML('beforeend', `<h1>Error :(</h1>`);
+            }
+        })
+    </script>
+</body>
+</html>
