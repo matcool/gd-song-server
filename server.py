@@ -6,6 +6,31 @@ import re
 from bs4 import BeautifulSoup
 import sys
 
+# Change this if you don't want caching, for whatever reason
+CACHE = True
+
+if CACHE:
+    import sqlite3
+
+    class DBConnect:
+        def __init__(self, path: str):
+            self.path = path
+            self.conn = sqlite3.connect(self.path)
+
+        def close(self):
+            self.conn.close()
+
+        def __enter__(self):
+            return self.conn.cursor()
+        
+        def __exit__(self, *args):
+            self.conn.commit()
+
+    db = DBConnect('song_cache.db')
+    with db as c:
+        c.execute('CREATE TABLE IF NOT EXISTS songs (id integer, name text, artist text, size int, url text)')
+
+
 async def get_song_official(song_id: int):
     async with ClientSession() as session:
         async with session.post(f'http://www.boomlings.com/database/getGJSongInfo.php', data={'songID': song_id, 'secret': 'Wmfd2893gb7'}) as resp:
@@ -20,7 +45,7 @@ async def scrape_song_ng(song_id: int):
 
     script_tag = soup.find('script', text=re.compile('new embedController'))
     if script_tag is None:
-        return web.Response(text='-1')
+        return
     obj = re.search(r'new embedController\(\[({.+})\],', script_tag.string, flags=re.S).group(1)
     # remove some js code
     obj = re.sub(r',\s*callback\s*:\s*function\s*\(\)\s*{\s*[\s\S]+\s*}\s*\)\s*\(jQuery\);\s*}', '', obj)
@@ -40,11 +65,37 @@ async def song(request: web.BaseRequest):
     except ValueError:
         return web.Response(text='-1')
 
-    official = await get_song_official(song_id)
-    if official != '-2':
-        return web.Response(text=official)
-    
-    song = await scrape_song_ng(song_id)
+    song = None
+
+    # if cache is enabled, check it first
+    if CACHE:
+        with db as c:
+            song = c.execute('SELECT * FROM songs WHERE id=?', (song_id, )).fetchone()
+            if song:
+                song = {
+                    'name': song[1],
+                    'artist': song[2],
+                    'size': song[3],
+                    'url': song[4],
+                }
+
+    if not song:
+        official = await get_song_official(song_id)
+        if official != '-2':
+            return web.Response(text=official)
+
+    if CACHE:
+        if not song:
+            with db as c:
+                song = await scrape_song_ng(song_id)
+                if song:
+                    c.execute('INSERT INTO songs (id, name, artist, size, url) VALUES (?, ?, ?, ?, ?)',
+                        (song_id, song['name'], song['artist'], song['size'], song['url']))
+    else:
+        song = await scrape_song_ng(song_id)
+
+    if not song:
+        return web.Response(text='-1')
 
     stupid = {
         1: song_id,
