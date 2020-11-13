@@ -4,6 +4,7 @@ import asyncio
 import json
 import re
 from bs4 import BeautifulSoup
+import sys
 
 async def get_song_official(song_id: int):
     async with ClientSession() as session:
@@ -66,4 +67,4 @@ app.add_routes([
     web.post('/song', song),
 ])
 
-web.run_app(app, port=8080)
+web.run_app(app, port=int(sys.argv[1]) if len(sys.argv) > 1 else 8080)
