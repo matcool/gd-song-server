@@ -1,7 +1,8 @@
 # gd song server
 
-A custom song server for geometry dash which screapes the newgrounds audio portal, allowing you to use **any** song from newgrounds, whether its allowed on GD or not
+A custom song server for geometry dash which scrapes the newgrounds audio portal, allowing you to use **any** song from newgrounds, whether its allowed on GD or not.
 
+*you can't use this to download songs that have been removed from newgrounds entirely*
 ## Usage
 
 ```
@@ -34,5 +35,5 @@ To get your encoded url, run this bit of code
 
 ### EXE Editing
 
-You can also change the song url by editing the exe and replacing `http://www.boomlings.com/database/getGJSongInfo.php` with `http://your-server/song` (make sure the lengths match!) \
+You can also change the song url by editing the exe and replacing `http://www.boomlings.com/database/getGJSongInfo.php` with `http://your-server/song` (make sure the lengths match) \
 *I haven't tested this myself so it may not work*
