@@ -80,16 +80,13 @@ async def song(request: web.BaseRequest):
         10: song['url']
     }
     sep = '~|~'
-    return web.Response(text=sep.join(f'{key}{sep}{value}' for key, value in stupid.items()))
-
-async def upload_get(request):
-    return web.FileResponse('./upload.html')
+    return web.Response(text=sep.join(f'{key}{sep}{str(value).replace(sep, "")}' for key, value in stupid.items()))
 
 async def upload(request: web.BaseRequest):
     data = await request.json()
-    name = data.get('name', '').strip()
-    author = data.get('author', '').strip()
-    url = data.get('url', '').strip()
+    name = data.get('name', '').strip().replace('~|~', '')
+    author = data.get('author', '').strip().replace('~|~', '')
+    url = data.get('url', '').strip().replace('~|~', '')
     if not name or not author or not url:
         return missing_parameters()
     # check if its actually an audio file and get the size
@@ -120,36 +117,10 @@ app = web.Application()
 
 app.add_routes([
     web.post('/song', song),
-    web.get('/upload', upload_get),
     web.post('/upload', upload),
     web.get('/songs', songs),
     web.get('/', index),
 ])
-
-# def error_pages(overrides):
-#     async def middleware(app, handler):
-#         async def middleware_handler(request):
-#             try:
-#                 response = await handler(request)
-#                 override = overrides.get(response.status)
-#                 if override is None:
-#                     return response
-#                 else:
-#                     return await override(request, response)
-#             except web.HTTPException as ex:
-#                 override = overrides.get(ex.status)
-#                 if override is None:
-#                     raise
-#                 else:
-#                     return await override(request, ex)
-#         return middleware_handler
-#     return middleware
-
-# async def handle_404(request, response):
-#     print(request)
-#     return response
-
-# app.middlewares.append(error_pages({404: handle_404}))
 
 web.run_app(app, port=8080)
 print('bye')
