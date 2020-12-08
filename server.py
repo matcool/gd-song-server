@@ -3,6 +3,7 @@ from urllib.parse import unquote
 import asyncio
 import json
 import sqlite3
+import sys
 
 class DBConnect:
     def __init__(self, path: str):
@@ -122,6 +123,6 @@ app.add_routes([
     web.get('/', index),
 ])
 
-web.run_app(app, port=8080)
+web.run_app(app, port=int(sys.argv[1]) if len(sys.argv) > 1 else 8080)
 print('bye')
 db.close()
