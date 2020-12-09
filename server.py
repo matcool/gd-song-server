@@ -71,7 +71,7 @@ def format_custom_song(song):
     return {
         'id': CUSTOM_SONG_OFFSET + song[0],
         'name': song[1],
-        'author': song[2],
+        'artist': song[2],
         'size': song[3],
         'url': song[4]
     }
@@ -88,7 +88,7 @@ def format_song_stupid(song) -> str:
         1: song['id'],
         2: song['name'],
         3: 69, # (author id) what is this even for
-        4: song['author'],
+        4: song['artist'],
         5: f"{song['size'] / 1024 / 1024:.2f}",
         6: '',
         7: '',
@@ -119,6 +119,7 @@ async def handle_ng_song(song_id: int):
         song = c.execute('SELECT * FROM cache WHERE id=?', (song_id, )).fetchone()
         if song:
             song = {
+                'id': song_id,
                 'name': song[1],
                 'artist': song[2],
                 'size': song[3],
@@ -156,7 +157,8 @@ async def upload(request: web.BaseRequest):
                 async with session.head(url) as resp:
                     c_type = resp.headers.get('Content-Type', '')
                     c_length = resp.headers.get('Content-Length', '0')
-                    if not c_type.startswith('audio/'): return missing_parameters()
+                    # dropbox returns text/html, even though it works, so disabling it for now
+                    # if not c_type.startswith('audio/'): return missing_parameters()
                     try:
                         size = int(c_length)
                     except ValueError:
