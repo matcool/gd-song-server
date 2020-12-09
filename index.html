@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Song List</title>
+        <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&display=swap" rel="stylesheet">
+        <style>
+            body {
+                background: #333333;
+                color: white;
+                font-family: 'Roboto', sans-serif;
+            }
+
+            tbody tr:nth-child(odd) {
+                background-color: #3d3d3d;
+            }
+
+            tbody tr:nth-child(even) {
+                background-color: #525252;
+            }
+        </style>
+        <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+    </head>
+
+    <body>
+        <div>
+            <label for="song-name">Song Name</label>
+            <br>
+            <input type="text" id="ipt-song-name" name="song-name">
+            <br>
+            <label for="song-author">Author</label>
+            <br>
+            <input type="text" id="ipt-song-author" name="song-author">
+            <br>
+            <label for="song-url">Song URL</label>
+            <br>
+            <input type="url" id="ipt-song-url" name="song-url">
+            <br>
+            <button id="btn-submit" style="margin: 1em 0;">Submit</button>
+        </div>
+        <table>
+            <tr id="thead">
+                <th style="width: 100px;">Song ID</th>
+                <th style="width: 500px;">Name</th>
+            </tr>
+        </table>
+        <script>
+            axios.get('/songs').then(response => {
+                const head = document.getElementById('thead');
+                for (let song of response.data) {
+                    let idk = document.createElement('tr');
+                    let td = txt => {
+                        let tmp = document.createElement('td');
+                        tmp.textContent = txt;
+                        return tmp;
+                    };
+                    idk.appendChild(td(song.id));
+                    idk.appendChild(td(song.name));
+                    head.insertAdjacentElement('afterend', idk);
+                }
+            });
+
+        const btn = document.getElementById('btn-submit');
+        btn.addEventListener('click', async e => {
+            e.preventDefault();
+            if (btn.hasAttribute('disabled')) return;
+            btn.setAttribute('disabled', true);
+            const name = document.getElementById('ipt-song-name').value;
+            const author = document.getElementById('ipt-song-author').value;
+            const url = document.getElementById('ipt-song-url').value;
+            if (!name || !author || !url) {
+                btn.removeAttribute('disabled');
+                return;
+            }
+            try {
+                const response = await axios.post('/upload', {
+                    name, author, url
+                });
+                document.body.insertAdjacentHTML('afterbegin', `<h1>Song uploaded! ID: ${response.data.song_id}</h1>`);
+            } catch (error) {
+                console.dir(error);
+                document.body.insertAdjacentHTML('afterbegin', `<h1>Error :(</h1>`);
+                btn.removeAttribute('disabled');
+            }
+        })
+
+        </script>
+    </body>
+
+</html>
