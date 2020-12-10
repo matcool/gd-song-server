@@ -20,6 +20,10 @@
             tbody tr:nth-child(even) {
                 background-color: #525252;
             }
+
+            .center-text {
+                text-align: center;
+            }
         </style>
         <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
     </head>
@@ -30,7 +34,7 @@
             <br>
             <input type="text" id="ipt-song-name" name="song-name">
             <br>
-            <label for="song-author">Author</label>
+            <label for="song-author">Artist</label>
             <br>
             <input type="text" id="ipt-song-author" name="song-author">
             <br>
@@ -43,22 +47,34 @@
         <table>
             <tr id="thead">
                 <th style="width: 100px;">Song ID</th>
+                <th style="width: auto; padding: 0 10px;">Link</th>
                 <th style="width: 500px;">Name</th>
+                <th style="width: 200px;">Artist</th>
             </tr>
         </table>
         <script>
+            function elem(name, text, attrs) {
+                let e = document.createElement(name);
+                e.textContent = text;
+                if (attrs) {
+                    for (const [key, value] of Object.entries(attrs)) {
+                        e[key] = value;
+                    }
+                    if (attrs.class) {
+                        e.classList.add(attrs.class.split(' '))
+                    }
+                }
+                return e;
+            }
             axios.get('/songs').then(response => {
                 const head = document.getElementById('thead');
                 for (let song of response.data) {
-                    let idk = document.createElement('tr');
-                    let td = txt => {
-                        let tmp = document.createElement('td');
-                        tmp.textContent = txt;
-                        return tmp;
-                    };
-                    idk.appendChild(td(song.id));
-                    idk.appendChild(td(song.name));
-                    head.insertAdjacentElement('afterend', idk);
+                    let row = elem('tr');
+                    row.appendChild(elem('td', song.id, {class: 'center-text'}));
+                    row.appendChild(elem('td', null, {class: 'center-text'}).appendChild(elem('a', 'Link', {href: song.url})).parentElement);
+                    row.appendChild(elem('td', song.name));
+                    row.appendChild(elem('td', song.artist));
+                    head.insertAdjacentElement('afterend', row);
                 }
             });
 
