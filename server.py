@@ -6,6 +6,22 @@ import re
 import sqlite3
 from bs4 import BeautifulSoup
 import sys
+import argparse
+import time
+import re
+import os
+import asyncio
+
+parser = argparse.ArgumentParser()
+parser.add_argument('port', nargs='?', default=8080, type=int)
+parser.add_argument('--host', help='Host URL', default='http://localhost')
+parser.add_argument('--yt', help='Enable youtube-dl support for custom songs', action='store_true')
+args = parser.parse_args()
+
+print(f'Running on {args.host}:{args.port} with youtube-dl support {"enabled" if args.yt else "disabled"}')
+
+if 'win32' in sys.platform:
+    asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 
 class DBConnect:
     def __init__(self, path: str):
@@ -23,10 +39,22 @@ class DBConnect:
 
 db = DBConnect('songs.db')
 CUSTOM_SONG_OFFSET = 4_000_000
+YOUTUBE_DL_COOLDOWN = 2 * 60
+last_youtube_dl_use = time.time() - YOUTUBE_DL_COOLDOWN
+
+re_dropbox = re.compile(r'https:\/\/www\.dropbox\.com\/s\/\w{15}\/.+')
+re_soundcloud = re.compile(r'https:\/\/(?:www\.)?soundcloud\.com\/[\w-]+\/[\w-]+')
+re_youtube = re.compile(r'https:\/\/(?:(?:www\.)?youtube\.com\/watch\?v=|youtu.be\/)([\w-]{11})')
 
 with db as c:
-    c.execute('CREATE TABLE IF NOT EXISTS songs (id integer primary key, name text, artist text, size int, url text)')
+    c.execute('CREATE TABLE IF NOT EXISTS songs (id integer primary key, name text, artist text, size int, url text, origin text)')
     c.execute('CREATE TABLE IF NOT EXISTS cache (id integer,             name text, artist text, size int, url text)')
+
+# amazing migration
+with db as c:
+    columns = [i[1] for i in c.execute('pragma table_info(songs)').fetchall()]
+    if 'origin' not in columns:
+        c.execute('ALTER TABLE songs ADD origin text')
 
 async def get_song_official(song_id: int):
     async with ClientSession() as session:
@@ -63,9 +91,9 @@ def get_all_songs():
     c = db.conn.cursor()
     return c.execute('SELECT * FROM songs').fetchall()
 
-def add_custom_song(name: str, author: str, size: int, url: str) -> int:
+def add_custom_song(name: str, author: str, size: int, url: str, origin: str='') -> int:
     with db as c:
-        return c.execute('INSERT INTO songs (name, artist, size, url) VALUES (?, ?, ?, ?)', (name, author, size, url)).lastrowid
+        return c.execute('INSERT INTO songs (name, artist, size, url, origin) VALUES (?, ?, ?, ?, ?)', (name, author, size, url, origin)).lastrowid
 
 def format_custom_song(song):
     return {
@@ -150,24 +178,70 @@ async def upload(request: web.BaseRequest):
     url = data.get('url', '').strip().replace('~|~', '')
     if not name or not author or not url:
         return missing_parameters()
-    # check if its actually an audio file and get the size
-    if True:
-        try:
-            async with ClientSession() as session:
-                async with session.head(url) as resp:
-                    c_type = resp.headers.get('Content-Type', '')
-                    c_length = resp.headers.get('Content-Length', '0')
-                    # dropbox returns text/html, even though it works, so disabling it for now
-                    # if not c_type.startswith('audio/'): return missing_parameters()
-                    try:
-                        size = int(c_length)
-                    except ValueError:
-                        size = 0
-        except:
-            return missing_parameters()
+
+    youtube_dl = False
+
+    if re_dropbox.match(url):
+        url = url.replace('www.dropbox.com', 'dl.dropboxusercontent.com')
+    # i wish i had the walrus operator
+    elif re_soundcloud.match(url):
+        url = re_soundcloud.match(url)[0]
+        youtube_dl = True
+    elif re_youtube.match(url):
+        url = 'https://youtu.be/' + re_youtube.match(url)[1]
+        youtube_dl = True
+
+    if args.yt and youtube_dl:
+        return await handle_youtube_dl(url)
+    try:
+        async with ClientSession() as session:
+            async with session.head(url) as resp:
+                c_type = resp.headers.get('Content-Type', '')
+                c_length = resp.headers.get('Content-Length', '0')
+                if not c_type.startswith('audio/'):
+                    msg = f'content type is not audio ({c_type}), will probably not work'
+                else:
+                    msg = ''
+                try:
+                    size = int(c_length)
+                except ValueError:
+                    size = 0
+    except:
+        return missing_parameters()
+    return json_response({'song_id': add_custom_song(name, author, size, url) + CUSTOM_SONG_OFFSET, 'message': msg})
+
+async def run_command(*args):
+    process = await asyncio.create_subprocess_exec(
+        *args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+    )
+    stdout, stderr = await process.communicate()
+    return process, stdout, stderr
+
+async def handle_youtube_dl(url: str):
+    global last_youtube_dl_use
+    cooldown = YOUTUBE_DL_COOLDOWN - (time.time() - last_youtube_dl_use)
+    if cooldown > 0:
+        return json_response({'error': True, 'message': f'youtube-dl is on cooldoown! please wait {cooldown:.0f}s'})
+    last_youtube_dl_use = time.time()
+    if not os.path.exists('downloaded'):
+        os.mkdir('downloaded')
+    print('downloading:', url)
+    process, stdout, stderr = await run_command(
+        'youtube-dl', '--print-json', '--extract-audio', '--audio-format', 'mp3', '--max-filesize', '20m', url,
+        '--no-overwrites', '--output', 'downloaded/tmp.mp3'
+    )
+    if not process.returncode:
+        data = json.loads(stdout.decode('utf-8'))
+        name = data['title']
+        artist = data['uploader']
+        print('downloaded', name, artist)
+        song_id = add_custom_song(name, artist, os.path.getsize('downloaded/tmp.mp3'), url='', origin=url)
+        os.rename('downloaded/tmp.mp3', f'downloaded/{song_id}.mp3')
+        with db as c:
+            c.execute('UPDATE songs SET url=? WHERE id=?', (f'{args.host}:{args.port}/downloaded/{song_id}.mp3', song_id))
+        return json_response({'song_id': song_id + CUSTOM_SONG_OFFSET})
     else:
-        size = 0
-    return json_response({'song_id': add_custom_song(name, author, size, url) + CUSTOM_SONG_OFFSET})
+        return json_response({'error': True, 'message': 'error when downloading'})
 
 async def songs(request: web.BaseRequest):
     return json_response([format_custom_song(song) for song in get_all_songs()])
@@ -183,6 +257,8 @@ app.add_routes([
     web.get('/songs', songs),
     web.get('/', index),
 ])
+
+app.router.add_static('/downloaded', path='downloaded')
 
 web.run_app(app, port=int(sys.argv[1]) if len(sys.argv) > 1 else 8080)
 print('bye')

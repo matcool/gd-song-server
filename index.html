@@ -94,7 +94,13 @@
                 const response = await axios.post('/upload', {
                     name, author, url
                 });
-                document.body.insertAdjacentHTML('afterbegin', `<h1>Song uploaded! ID: ${response.data.song_id}</h1>`);
+                if (response.data.error) {
+                    console.log(response);
+                    document.body.insertAdjacentHTML('afterbegin', `<h1>Error: ${response.data.message}</h1>`);
+                    btn.removeAttribute('disabled');
+                } else {
+                    document.body.insertAdjacentHTML('afterbegin', `<h1>Song uploaded! ID: ${response.data.song_id}</h1> ${response.data.message}`);
+                }
             } catch (error) {
                 console.dir(error);
                 document.body.insertAdjacentHTML('afterbegin', `<h1>Error :(</h1>`);
