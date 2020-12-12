@@ -41,6 +41,7 @@ db = DBConnect('songs.db')
 CUSTOM_SONG_OFFSET = 4_000_000
 YOUTUBE_DL_COOLDOWN = 2 * 60
 last_youtube_dl_use = time.time() - YOUTUBE_DL_COOLDOWN
+DOWNLOADED_SONGS_FOLDER = 'downloaded'
 
 re_dropbox = re.compile(r'https:\/\/www\.dropbox\.com\/s\/\w{15}\/.+')
 re_soundcloud = re.compile(r'https:\/\/(?:www\.)?soundcloud\.com\/[\w-]+\/[\w-]+')
@@ -101,7 +102,8 @@ def format_custom_song(song):
         'name': song[1],
         'artist': song[2],
         'size': song[3],
-        'url': song[4]
+        'url': f'{args.host}:{args.port}/downloaded/{song[0]}.mp3' if song[5] else song[4],
+        'origin': song[5]
     }
 
 def json_response(obj):
@@ -136,7 +138,10 @@ async def song(request: web.BaseRequest):
     if song_id <= CUSTOM_SONG_OFFSET:
         return await handle_ng_song(song_id)
 
-    song = format_custom_song(get_song_custom(song_id - CUSTOM_SONG_OFFSET))
+    custom_song = get_song_custom(song_id - CUSTOM_SONG_OFFSET)
+    if custom_song is None:
+        return web.Response(text='-1')
+    song = format_custom_song(custom_song)
 
     return web.Response(text=format_song_stupid(song))
 
@@ -219,26 +224,30 @@ async def run_command(*args):
 
 async def handle_youtube_dl(url: str):
     global last_youtube_dl_use
+
+    with db as c:
+        results = c.execute('SELECT id FROM songs WHERE origin = ?', (url,)).fetchone()
+        if results:
+            return json_response({'error': True, 'message': f'Song already exists ({results[0] + CUSTOM_SONG_OFFSET})'})
+
     cooldown = YOUTUBE_DL_COOLDOWN - (time.time() - last_youtube_dl_use)
     if cooldown > 0:
         return json_response({'error': True, 'message': f'youtube-dl is on cooldoown! please wait {cooldown:.0f}s'})
     last_youtube_dl_use = time.time()
-    if not os.path.exists('downloaded'):
-        os.mkdir('downloaded')
+
     print('downloading:', url)
+    output_tmp = os.path.join(DOWNLOADED_SONGS_FOLDER, 'tmp.mp3')
     process, stdout, stderr = await run_command(
         'youtube-dl', '--print-json', '--extract-audio', '--audio-format', 'mp3', '--max-filesize', '20m', url,
-        '--no-overwrites', '--output', 'downloaded/tmp.mp3'
+        '--no-overwrites', '--output', output_tmp
     )
     if not process.returncode:
         data = json.loads(stdout.decode('utf-8'))
         name = data['title']
         artist = data['uploader']
         print('downloaded', name, artist)
-        song_id = add_custom_song(name, artist, os.path.getsize('downloaded/tmp.mp3'), url='', origin=url)
-        os.rename('downloaded/tmp.mp3', f'downloaded/{song_id}.mp3')
-        with db as c:
-            c.execute('UPDATE songs SET url=? WHERE id=?', (f'{args.host}:{args.port}/downloaded/{song_id}.mp3', song_id))
+        song_id = add_custom_song(name, artist, os.path.getsize(output_tmp), url='', origin=url)
+        os.rename(output_tmp, os.path.join(DOWNLOADED_SONGS_FOLDER, f'{song_id}.mp3'))
         return json_response({'song_id': song_id + CUSTOM_SONG_OFFSET})
     else:
         return json_response({'error': True, 'message': 'error when downloading'})
@@ -258,7 +267,10 @@ app.add_routes([
     web.get('/', index),
 ])
 
-app.router.add_static('/downloaded', path='downloaded')
+if not os.path.exists(DOWNLOADED_SONGS_FOLDER):
+    os.mkdir(DOWNLOADED_SONGS_FOLDER)
+
+app.router.add_static('/downloaded', path=DOWNLOADED_SONGS_FOLDER)
 
 web.run_app(app, port=int(sys.argv[1]) if len(sys.argv) > 1 else 8080)
 print('bye')
