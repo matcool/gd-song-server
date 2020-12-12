@@ -247,7 +247,21 @@ async def handle_youtube_dl(url: str):
         artist = data['uploader']
         print('downloaded', name, artist)
         song_id = add_custom_song(name, artist, os.path.getsize(output_tmp), url='', origin=url)
-        os.rename(output_tmp, os.path.join(DOWNLOADED_SONGS_FOLDER, f'{song_id}.mp3'))
+        _, codec, _ = await run_command(
+            'ffprobe', '-v', 'error', '-select_streams', 'a:0',
+            '-show_entries', 'stream=codec_name', '-of', 'default=noprint_wrappers=1:nokey=1',
+            output_tmp
+        )
+        codec = codec.decode().strip()
+        output = os.path.join(DOWNLOADED_SONGS_FOLDER, f'{song_id}.mp3')
+        if codec == 'mp3':
+            os.rename(output_tmp, output)
+        else:
+            # stupid youtube was giving me opus files disguised as mp3
+            print(f'converting from {codec} to mp3')
+            await run_command('ffmpeg', '-i', output_tmp, '-c:a', 'mp3', output)
+            os.remove(output_tmp)
+
         return json_response({'song_id': song_id + CUSTOM_SONG_OFFSET})
     else:
         return json_response({'error': True, 'message': 'error when downloading'})
