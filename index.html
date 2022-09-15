@@ -1,114 +1,114 @@
 <!DOCTYPE html>
 <html lang="en">
 
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Song List</title>
-        <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&display=swap" rel="stylesheet">
-        <style>
-            body {
-                background: #333333;
-                color: white;
-                font-family: 'Roboto', sans-serif;
-            }
+	<head>
+		<meta charset="UTF-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1.0">
+		<title>Song List</title>
+		<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&display=swap" rel="stylesheet">
+		<style>
+			body {
+				background: #333333;
+				color: white;
+				font-family: 'Roboto', sans-serif;
+			}
 
-            tbody tr:nth-child(odd) {
-                background-color: #3d3d3d;
-            }
+			tbody tr:nth-child(odd) {
+				background-color: #3d3d3d;
+			}
 
-            tbody tr:nth-child(even) {
-                background-color: #525252;
-            }
+			tbody tr:nth-child(even) {
+				background-color: #525252;
+			}
 
-            .center-text {
-                text-align: center;
-            }
-        </style>
-        <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
-    </head>
+			.center-text {
+				text-align: center;
+			}
+		</style>
+		<script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+	</head>
 
-    <body>
-        <div>
-            <label for="song-name">Song Name</label>
-            <br>
-            <input type="text" id="ipt-song-name" name="song-name">
-            <br>
-            <label for="song-author">Artist</label>
-            <br>
-            <input type="text" id="ipt-song-author" name="song-author">
-            <br>
-            <label for="song-url">Song URL</label>
-            <br>
-            <input type="url" id="ipt-song-url" name="song-url">
-            <br>
-            <button id="btn-submit" style="margin: 1em 0;">Submit</button>
-        </div>
-        <table>
-            <tr id="thead">
-                <th style="width: 100px;">Song ID</th>
-                <th style="width: auto; padding: 0 10px;">Link</th>
-                <th style="width: 500px;">Name</th>
-                <th style="width: 200px;">Artist</th>
-            </tr>
-        </table>
-        <script>
-            function elem(name, text, attrs) {
-                let e = document.createElement(name);
-                e.textContent = text;
-                if (attrs) {
-                    for (const [key, value] of Object.entries(attrs)) {
-                        e[key] = value;
-                    }
-                    if (attrs.class) {
-                        e.classList.add(attrs.class.split(' '))
-                    }
-                }
-                return e;
-            }
-            axios.get('/songs').then(response => {
-                const head = document.getElementById('thead');
-                for (let song of response.data) {
-                    let row = elem('tr');
-                    row.appendChild(elem('td', song.id, {class: 'center-text'}));
-                    row.appendChild(elem('td', null, {class: 'center-text'}).appendChild(elem('a', 'Link', {href: song.url})).parentElement);
-                    row.appendChild(elem('td', song.name));
-                    row.appendChild(elem('td', song.artist));
-                    head.insertAdjacentElement('afterend', row);
-                }
-            });
+	<body>
+		<div>
+			<label for="song-name">Song Name</label>
+			<br>
+			<input type="text" id="ipt-song-name" name="song-name">
+			<br>
+			<label for="song-author">Artist</label>
+			<br>
+			<input type="text" id="ipt-song-author" name="song-author">
+			<br>
+			<label for="song-url">Song URL</label>
+			<br>
+			<input type="url" id="ipt-song-url" name="song-url">
+			<br>
+			<button id="btn-submit" style="margin: 1em 0;">Submit</button>
+		</div>
+		<table>
+			<tr id="thead">
+				<th style="width: 100px;">Song ID</th>
+				<th style="width: auto; padding: 0 10px;">Link</th>
+				<th style="width: 500px;">Name</th>
+				<th style="width: 200px;">Artist</th>
+			</tr>
+		</table>
+		<script>
+			function elem(name, text, attrs) {
+				let e = document.createElement(name);
+				e.textContent = text;
+				if (attrs) {
+					for (const [key, value] of Object.entries(attrs)) {
+						e[key] = value;
+					}
+					if (attrs.class) {
+						e.classList.add(attrs.class.split(' '))
+					}
+				}
+				return e;
+			}
+			axios.get('/songs').then(response => {
+				const head = document.getElementById('thead');
+				for (let song of response.data) {
+					let row = elem('tr');
+					row.appendChild(elem('td', song.id, {class: 'center-text'}));
+					row.appendChild(elem('td', null, {class: 'center-text'}).appendChild(elem('a', 'Link', {href: song.url})).parentElement);
+					row.appendChild(elem('td', song.name));
+					row.appendChild(elem('td', song.artist));
+					head.insertAdjacentElement('afterend', row);
+				}
+			});
 
-        const btn = document.getElementById('btn-submit');
-        btn.addEventListener('click', async e => {
-            e.preventDefault();
-            if (btn.hasAttribute('disabled')) return;
-            btn.setAttribute('disabled', true);
-            const name = document.getElementById('ipt-song-name').value;
-            const author = document.getElementById('ipt-song-author').value;
-            const url = document.getElementById('ipt-song-url').value;
-            if (!name || !author || !url) {
-                btn.removeAttribute('disabled');
-                return;
-            }
-            try {
-                const response = await axios.post('/upload', {
-                    name, author, url
-                });
-                if (response.data.error) {
-                    console.log(response);
-                    document.body.insertAdjacentHTML('afterbegin', `<h1>Error: ${response.data.message}</h1>`);
-                    btn.removeAttribute('disabled');
-                } else {
-                    document.body.insertAdjacentHTML('afterbegin', `<h1>Song uploaded! ID: ${response.data.song_id}</h1> ${response.data.message}`);
-                }
-            } catch (error) {
-                console.dir(error);
-                document.body.insertAdjacentHTML('afterbegin', `<h1>Error :(</h1>`);
-                btn.removeAttribute('disabled');
-            }
-        })
+		const btn = document.getElementById('btn-submit');
+		btn.addEventListener('click', async e => {
+			e.preventDefault();
+			if (btn.hasAttribute('disabled')) return;
+			btn.setAttribute('disabled', true);
+			const name = document.getElementById('ipt-song-name').value;
+			const author = document.getElementById('ipt-song-author').value;
+			const url = document.getElementById('ipt-song-url').value;
+			if (!name || !author || !url) {
+				btn.removeAttribute('disabled');
+				return;
+			}
+			try {
+				const response = await axios.post('/upload', {
+					name, author, url
+				});
+				if (response.data.error) {
+					console.log(response);
+					document.body.insertAdjacentHTML('afterbegin', `<h1>Error: ${response.data.message}</h1>`);
+					btn.removeAttribute('disabled');
+				} else {
+					document.body.insertAdjacentHTML('afterbegin', `<h1>Song uploaded! ID: ${response.data.song_id}</h1> ${response.data.message}`);
+				}
+			} catch (error) {
+				console.dir(error);
+				document.body.insertAdjacentHTML('afterbegin', `<h1>Error :(</h1>`);
+				btn.removeAttribute('disabled');
+			}
+		})
 
-        </script>
-    </body>
+		</script>
+	</body>
 
 </html>
