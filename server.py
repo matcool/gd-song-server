@@ -16,10 +16,10 @@ from pathlib import Path
 parser = argparse.ArgumentParser()
 parser.add_argument('port', nargs='?', default=8080, type=int)
 parser.add_argument('--host', help='Host URL', default='http://localhost')
-parser.add_argument('--yt', help='Enable youtube-dl support for custom songs', action='store_true')
+parser.add_argument('--yt', help='Enable youtube-dl support')
 args = parser.parse_args()
 
-print(f'Running on {args.host}:{args.port} with youtube-dl support {"enabled" if args.yt else "disabled"}')
+print(f'Running on {args.host}:{args.port} with youtube-dl set to {args.yt!r}')
 
 if 'win32' in sys.platform:
 	asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
@@ -179,10 +179,13 @@ async def handle_ng_song(song_id: int):
 
 async def upload(request: web.BaseRequest):
 	data = await request.json()
+	is_direct = data.get('is_direct', True)
 	name = data.get('name', '').strip().replace('~|~', '')
 	author = data.get('author', '').strip().replace('~|~', '')
 	url = data.get('url', '').strip().replace('~|~', '')
-	if not name or not author or not url:
+	if not url:
+		return missing_parameters()
+	if is_direct and (not name or not author):
 		return missing_parameters()
 
 	youtube_dl = False
@@ -196,6 +199,12 @@ async def upload(request: web.BaseRequest):
 	elif re_youtube.match(url):
 		url = 'https://youtu.be/' + re_youtube.match(url)[1]
 		youtube_dl = True
+
+	if not is_direct and not youtube_dl:
+		return json_response({
+			'error': True,
+			'message': 'domain not supported (only yt and soundcloud)'
+		})
 
 	if args.yt and youtube_dl:
 		return await handle_youtube_dl(url)
@@ -214,7 +223,12 @@ async def upload(request: web.BaseRequest):
 					size = 0
 	except:
 		return missing_parameters()
-	return json_response({'song_id': add_custom_song(name, author, size, url) + CUSTOM_SONG_OFFSET, 'message': msg})
+	return json_response({
+		'song_id': add_custom_song(name, author, size, url) + CUSTOM_SONG_OFFSET,
+		'name': name,
+		'author': author,
+		'message': msg
+	})
 
 async def run_command(*args):
 	process = await asyncio.create_subprocess_exec(
@@ -238,10 +252,14 @@ async def handle_youtube_dl(url: str):
 
 	print('downloading:', url)
 	output_tmp = DOWNLOADED_SONGS_FOLDER / 'tmp.mp3'
-	process, stdout, stderr = await run_command(
-		'youtube-dl', '--print-json', '--extract-audio', '--audio-format', 'mp3', '--max-filesize', '20m', url,
-		'--no-overwrites', '--output', output_tmp
-	)
+	ytdl_args = [args.yt, '--extract-audio', '--audio-format', 'mp3', '--max-filesize', '20m', url,
+		'--no-overwrites', '--output', output_tmp]
+	if args.yt.endswith('yt-dlp'):
+		ytdl_args += ['--dump-json', '--no-simulate', '--no-progress', '--quiet']
+	else:
+		ytdl_args += ['--print-json']
+
+	process, stdout, stderr = await run_command(*ytdl_args)
 	if not process.returncode:
 		data = json.loads(stdout.decode('utf-8'))
 		name = data['title']
@@ -263,7 +281,11 @@ async def handle_youtube_dl(url: str):
 			await run_command('ffmpeg', '-i', output_tmp, '-c:a', 'mp3', output)
 			os.remove(output_tmp)
 
-		return json_response({'song_id': song_id + CUSTOM_SONG_OFFSET})
+		return json_response({
+			'song_id': song_id + CUSTOM_SONG_OFFSET,
+			'name': name,
+			'author': artist
+		})
 	else:
 		return json_response({'error': True, 'message': 'error when downloading'})
 
@@ -287,6 +309,6 @@ if not DOWNLOADED_SONGS_FOLDER.exists():
 
 app.router.add_static('/downloaded', path=str(DOWNLOADED_SONGS_FOLDER))
 
-web.run_app(app, port=int(sys.argv[1]) if len(sys.argv) > 1 else 8080)
+web.run_app(app, port=args.port)
 print('bye')
 db.close()

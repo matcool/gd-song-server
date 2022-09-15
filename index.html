@@ -24,26 +24,47 @@
 			.center-text {
 				text-align: center;
 			}
+
+			.modal {
+				display: flex;
+				flex-direction: column;
+				justify-content: center;
+				align-items: center;
+				position: fixed;
+				left: 0;
+				top: 0;
+				right: 0;
+				bottom: 0;
+			}
+
+			.modal-bg {
+				position: absolute;
+				left: 0;
+				top: 0;
+				right: 0;
+				bottom: 0;
+				background: black;
+				opacity: 50%;
+				z-index: 10;
+			}
+
+			.modal-inner {
+				position: relative;
+				z-index: 20;
+			}
+
+			.flex {
+				display: flex;
+			}
+			.flex-col {
+				flex-direction: column;
+			}
 		</style>
 		<script src="https://unpkg.com/axios/dist/axios.min.js"></script>
 	</head>
 
 	<body>
-		<div>
-			<label for="song-name">Song Name</label>
-			<br>
-			<input type="text" id="ipt-song-name" name="song-name">
-			<br>
-			<label for="song-author">Artist</label>
-			<br>
-			<input type="text" id="ipt-song-author" name="song-author">
-			<br>
-			<label for="song-url">Song URL</label>
-			<br>
-			<input type="url" id="ipt-song-url" name="song-url">
-			<br>
-			<button id="btn-submit" style="margin: 1em 0;">Submit</button>
-		</div>
+		<button style="margin: 1em 0;" id="btn-open-modal">Submit</button>
 		<table>
 			<tr id="thead">
 				<th style="width: 100px;">Song ID</th>
@@ -52,6 +73,30 @@
 				<th style="width: 200px;">Artist</th>
 			</tr>
 		</table>
+
+		<div class="modal" style="visibility: hidden;" id="song-modal">
+			<div class="modal-bg"></div>
+			<div class="modal-inner">
+				<div class="flex flex-col" style="background: #525252; padding: 1em; font-size: 2em;">
+					<label>
+						<input type="checkbox" id="ipt-direct" style="transform: scale(2)">
+						Direct song link?
+					</label>
+
+					<label>Song URL</label>
+					<input type="url" id="ipt-song-url">
+					<label for="song-name">Song Name</label>
+					<input type="text" id="ipt-song-name" name="song-name" disabled>
+					<label for="song-author">Artist</label>
+					<input type="text" id="ipt-song-author" name="song-author" disabled>
+					<br>
+					<button id="btn-submit">Submit</button>
+					<div id="response-div">
+					</div>
+				</div>
+			</div>
+		</div>
+
 		<script>
 			function elem(name, text, attrs) {
 				let e = document.createElement(name);
@@ -79,34 +124,63 @@
 			});
 
 		const btn = document.getElementById('btn-submit');
+		let block_modal = false;
+
 		btn.addEventListener('click', async e => {
 			e.preventDefault();
 			if (btn.hasAttribute('disabled')) return;
 			btn.setAttribute('disabled', true);
+			const is_direct = document.getElementById('ipt-direct').checked;
 			const name = document.getElementById('ipt-song-name').value;
 			const author = document.getElementById('ipt-song-author').value;
 			const url = document.getElementById('ipt-song-url').value;
-			if (!name || !author || !url) {
+			if (!url || (is_direct && (!author || !url))) {
 				btn.removeAttribute('disabled');
 				return;
 			}
+			let div = document.getElementById('response-div');
+			div.replaceChildren(); // remove from previous request
 			try {
+				block_modal = true;
 				const response = await axios.post('/upload', {
-					name, author, url
+					is_direct, name, author, url
 				});
 				if (response.data.error) {
 					console.log(response);
-					document.body.insertAdjacentHTML('afterbegin', `<h1>Error: ${response.data.message}</h1>`);
+					div.appendChild(elem('p', `Error: ${response.data.message}`));
 					btn.removeAttribute('disabled');
 				} else {
-					document.body.insertAdjacentHTML('afterbegin', `<h1>Song uploaded! ID: ${response.data.song_id}</h1> ${response.data.message}`);
+					div.appendChild(elem('p', `Song uploaded! ID: ${response.data.song_id}`));
+					div.appendChild(elem('span', response.data.name));
+					div.appendChild(elem('br'));
+					div.appendChild(elem('span', response.data.author));
 				}
 			} catch (error) {
 				console.dir(error);
-				document.body.insertAdjacentHTML('afterbegin', `<h1>Error :(</h1>`);
+				div.appendChild(elem('p', `internal error :(`));
 				btn.removeAttribute('disabled');
 			}
+			block_modal = false;
 		})
+
+		document.getElementById('btn-open-modal').addEventListener('click', e => {
+			document.getElementById('song-modal').style.visibility = null;
+			document.getElementById('response-div').replaceChildren();
+		});
+
+		document.getElementById('ipt-direct').addEventListener('click', e => {
+			if (!block_modal) {
+				let checked = e.target.checked;
+				document.getElementById('ipt-song-name').disabled = !checked;
+				document.getElementById('ipt-song-author').disabled = !checked;
+			}
+		});
+
+		for (let item of document.getElementsByClassName('modal-bg')) {
+			item.addEventListener('click', e => {
+				e.target.parentElement.style.visibility = 'hidden';
+			});
+		}
 
 		</script>
 	</body>
