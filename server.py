@@ -51,6 +51,7 @@ re_youtube = re.compile(r'https:\/\/(?:(?:www\.)?youtube\.com\/watch\?v=|youtu.b
 with db as c:
 	c.execute('CREATE TABLE IF NOT EXISTS songs (id integer primary key, name text, artist text, size int, url text, origin text)')
 	c.execute('CREATE TABLE IF NOT EXISTS cache (id integer,             name text, artist text, size int, url text)')
+	c.execute('CREATE TABLE IF NOT EXISTS gdcache (id integer, response text)')
 
 # amazing migration
 with db as c:
@@ -60,7 +61,8 @@ with db as c:
 
 async def get_song_official(song_id: int):
 	async with ClientSession() as session:
-		async with session.post(f'http://www.boomlings.com/database/getGJSongInfo.php', data={'songID': song_id, 'secret': 'Wmfd2893gb7'}) as resp:
+		async with session.post('http://www.boomlings.com/database/getGJSongInfo.php',
+			data={'songID': song_id, 'secret': 'Wmfd2893gb7'}, headers={'User-Agent': ''}) as resp:
 			return await resp.text()
 
 async def scrape_song_ng(song_id: int):
@@ -159,16 +161,21 @@ async def handle_ng_song(song_id: int):
 				'size': song[3],
 				'url': song[4],
 			}
+		resp = c.execute('SELECT response FROM gdcache WHERE id=?', (song_id, )).fetchone()
+		if resp:
+			return web.Response(text=resp[0])
 
 	if not song:
 		official = await get_song_official(song_id)
 		if official != '-2':
+			with db as c:
+				c.execute('INSERT INTO gdcache (id, response) VALUES (?, ?)', (song_id, official))
 			return web.Response(text=official)
 
 	if not song:
-		with db as c:
-			song = await scrape_song_ng(song_id)
-			if song:
+		song = await scrape_song_ng(song_id)
+		if song:
+			with db as c:
 				c.execute('INSERT INTO cache (id, name, artist, size, url) VALUES (?, ?, ?, ?, ?)',
 					(song_id, song['name'], song['artist'], song['size'], song['url']))
 
